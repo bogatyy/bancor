@@ -58,7 +58,7 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
         reserve_ratio_after = (totalSupply - amount) / (reserveBalance() - ethAmount);
         balances[msg.sender] -= amount;
         totalSupply -= amount;
-        if (!msg.sender.send(amount)) {
+        if (!msg.sender.send(ethAmount)) {
             balances[msg.sender] += amount;
             totalSupply += amount;
             return false;
