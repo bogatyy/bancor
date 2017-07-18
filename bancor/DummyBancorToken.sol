@@ -17,10 +17,13 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
 
     uint256 public reserve_ratio_before;
     uint256 public reserve_ratio_after;
+    
+    event Deposit();
+    event Withdraw(uint256 amount);
 
     /* I can't make MyEtherWallet send payments as part of constructor calls
      * while creating contracts. So instead of implementing a constructor,
-     * we follow the SetUp/TearDown paradigm
+     * we follow the SetUp/TearDown paradigm */
     function setUp(uint256 _initialSupply) payable {
         owner = msg.sender;
         balances[msg.sender] = _initialSupply;
@@ -46,6 +49,7 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
         totalSupply += tokensPurchased;
         // Debug: check ratio after.
         reserve_ratio_after = totalSupply / reserveBalance();
+        Deposit();
         return true;
     }
 
@@ -63,6 +67,7 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
             totalSupply += amount;
             return false;
         }
+        Withdraw(amount);
         return true;
     }
 
