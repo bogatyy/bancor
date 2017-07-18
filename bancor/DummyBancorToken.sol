@@ -18,7 +18,7 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
     uint256 public reserve_ratio_before;
     uint256 public reserve_ratio_after;
     
-    event Deposit();
+    event Deposit(address indexed sender);
     event Withdraw(uint256 amount);
 
     /* I can't make MyEtherWallet send payments as part of constructor calls
@@ -49,7 +49,7 @@ contract DummyBancorToken is BasicERC20Token, BancorFormula {
         totalSupply += tokensPurchased;
         // Debug: check ratio after.
         reserve_ratio_after = totalSupply / reserveBalance();
-        Deposit();
+        Deposit(msg.sender);
         return true;
     }
 
