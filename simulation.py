@@ -7,8 +7,9 @@ from one_frontrun import BANCOR_TOKEN, ETH_ERC20_TOKEN
 
 TOTAL_RESERVE = 80e3  # Total Bancor reserve was 80K ETH at highest point.
 ETH_PRICE = 270.0
-BLOCK_JUL03 = 3970000
-BLOCK_AUG03 = 4113664
+BLOCK_JUL01 = 3960000
+BLOCK_AUG01 = 4105000
+BLOCK_SEP01 = 4226000
 WEI_TO_ETH = 1e-18
 BNT_TO_ETH = 1e-2
 
@@ -21,11 +22,11 @@ def get_tx_value_in_eth(tx):
       method, from_token, to_token, amount, min_return = parse_tx_data(
           tx[u'input'], CHANGE_SIGNATURE)
     except Exception:
-      log('Error while parsing', tx[u'hash'])
+      return 0.0
+    if method != int(CHANGE_METHOD, 16):
       return 0.0
     if set([from_token, to_token]) != set(
-        [int(BANCOR_TOKEN, 16),
-         int(ETH_ERC20_TOKEN, 16)]):
+        [int(BANCOR_TOKEN, 16), int(ETH_ERC20_TOKEN, 16)]):
       log('Wrong from/to addresses', tx[u'hash'])
       return 0.0
     receipt = send_request({
@@ -44,32 +45,32 @@ def get_tx_value_in_eth(tx):
 
 
 def run_simulation():
-  total_txs = 0
-  large_tx_values = []
-  one_percent = (BLOCK_AUG03 - BLOCK_JUL03) / 100
-  for block_number in xrange(BLOCK_JUL03, BLOCK_AUG03):
-    if (block_number - BLOCK_JUL03) % one_percent == 0:
-      log('{0}% done'.format((block_number - BLOCK_JUL03) / one_percent))
+  one_percent = (BLOCK_SEP01 - BLOCK_JUL01) // 100
+  large_transactions_jul = []
+  large_transactions_aug = []
+  for block_number in xrange(BLOCK_JUL01, BLOCK_SEP01):
+    if (block_number - BLOCK_JUL01) % one_percent == 0:
+      log('{0}% done'.format((block_number - BLOCK_JUL01) // one_percent))
     block = send_request({
         'method': 'eth_getBlockByNumber',
         'params': [hex(block_number), True]
     })
     for tx in block[u'transactions']:
       value = get_tx_value_in_eth(tx)
-      if value > 0:
-        total_txs += 1
       if value > 99.0:
         log('Found a large transaction', value, tx[u'hash'])
-        large_tx_values.append(value)
+        if block_number < BLOCK_AUG01:
+          large_transactions_jul.append(value)
+        else:
+          large_transactions_aug.append(value)
 
-  log('All large TX values:', large_tx_values)
-  log('Total TXs for BancorPurchase+BancorChanger', total_txs)
-  log('Large TXs for BancorPurchase+BancorChanger', len(large_tx_values))
-  total_roi = sum(large_tx_values) / TOTAL_RESERVE
-  log('ROI for front-running all transaction >= 100 ETH: {0}%'.format(
-      total_roi * 100))
+  log('All large TXs in July:  ', large_transactions_jul)
+  log('All large TXs in August:', large_transactions_aug)
+  get_roi = lambda tx_values: 100.0 * sum(tx_values) / TOTAL_RESERVE
+  log('ROI for front-running all transaction >= 100 ETH: July {0}% August {1}%'.
+      format(get_roi(large_transactions_jul), get_roi(large_transactions_aug)))
   log('With a principal of 100 ETH, that would make you {0}$'.format(
-      100.0 * total_roi * ETH_PRICE))
+      get_roi(large_transactions_jul + large_transactions_aug) * ETH_PRICE))
 
 
 if __name__ == '__main__':
