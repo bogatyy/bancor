@@ -5,14 +5,14 @@ import random
 import json
 import requests
 
-BANCOR_PURCHASE = '0x77a77eca75445841875ebb67a33d0a97dc34d924'
-BANCOR_CHANGER = '0xca83bd8c4c7b1c0409b25fbd7e70b1ef57629ff4'
+BANCOR_CHANGER = '0xb72a0fa1e537c956dfca72711c468efd81270468'
 CHANGE_METHOD = '0x5e5144eb'
-CHANGE_SIGNATURE = [8] + [64] * 4
+QUICKBUY_METHOD = '0x7758c4f8'
+QUICKCHANGE_METHOD = '0xa93d7c72'
 BANCOR_TOKEN = '0x1f573d6fb3f13d689ff844b4ce37794d79a7ff1c'
-ETH_ERC20_TOKEN = '0xd76b5c2a23ef78368d8e34288b5b65d616b746ae'
-BUY_THRESHOLD = int(300e18)  # 300 ETH
-BUY_AMOUNT = int(100e18)  # 100 ETH
+ETH_ERC20_TOKEN = '0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315'
+BUY_THRESHOLD = int(1e18)  # 1 ETH
+BUY_AMOUNT = int(0.5e18)  # 0.5 ETH
 
 
 def log(*args):
@@ -57,25 +57,28 @@ def is_pending(tx_hash):
   return int(get_transaction(tx_hash)[u'blockHash'], 16) == 0
 
 
-def parse_tx_data(tx_data, param_sizes):
-  if len(tx_data) != sum(param_sizes) + 2:
+def parse_tx_data(tx_data):
+  if tx_data == '0x':
+    return '0x', []
+  if (len(tx_data) - 8 - 2) % 64 != 0:
     raise Exception('Data size misaligned with parse request')
+  method = tx_data[:10]
+  num_params = (len(tx_data) - 8 - 2) // 64
   params = []
-  for i in xrange(len(param_sizes)):
-    start = 2 + sum(param_sizes[:i])
-    params.append(int(tx_data[start:start + param_sizes[i]], 16))
-  return params
+  for i in xrange(num_params):
+    params.append(int(tx_data[10 + i * 64:10 + (i + 1) * 64], 16))
+  return method, params
 
 
-def pack_tx_data(params, param_sizes):
-  data = '0x'
-  for i, param in enumerate(params):
+def pack_tx_data(method, params):
+  data = method
+  for param in params:
     try:
       value = int(param, 16)
     except TypeError:
       value = param
     to_hex = hex(value)[2:].replace('L', '')
-    data += '0' * (param_sizes[i] - len(to_hex)) + to_hex
+    data += '0' * (64 - len(to_hex)) + to_hex
   return data
 
 
@@ -92,7 +95,7 @@ class BancorFrontrunner(object):
   def get_own_balance(self, token_address):
     BALANCEOF_METHOD = '0x70a08231'
     BALANCEOF_SIGNATURE = [8, 64]
-    data = pack_tx_data([BALANCEOF_METHOD, self.address], BALANCEOF_SIGNATURE)
+    data = pack_tx_data(BALANCEOF_METHOD, [self.address])
     hex_value = send_request({
         'method': 'eth_call',
         'params': [{
@@ -103,18 +106,26 @@ class BancorFrontrunner(object):
     return int(hex_value, 16)
 
   def triggers_buy(self, tx):
-    if tx[u'to'] == BANCOR_PURCHASE:
+    if tx[u'to'] != BANCOR_CHANGER:
+      return False
+    method, params = parse_tx_data(tx[u'input'])
+    if method in ['0x', QUICKBUY_METHOD]:
       return int(tx[u'value'], 16) >= BUY_THRESHOLD
-    elif tx[u'to'] == BANCOR_CHANGER:
-      method, from_token, to_token, amount, min_return = parse_tx_data(
-          tx[u'input'], CHANGE_SIGNATURE)
-      return (method == int(CHANGE_METHOD, 16) and
-              from_token == int(ETH_ERC20_TOKEN, 16) and
+    elif method == CHANGE_METHOD:
+      from_token, to_token, amount, min_return = params
+      return (from_token == int(ETH_ERC20_TOKEN, 16) and
               to_token == int(BANCOR_TOKEN, 16) and amount >= BUY_THRESHOLD)
+    elif method == QUICKCHANGE_METHOD:
+      amount = params[1]
+      token1, token2, token3 = params[4:]
+      if (token1 == int(ETH_ERC20_TOKEN, 16) and token2 == token1 and
+          token3 == int(BANCOR_TOKEN, 16)):
+        return amount >= BUY_THRESHOLD
     return False
 
   def commit_transaction_with_receipt(self, transaction_request):
     tx_hash = send_request(transaction_request)
+    log('Transaction send successful:', tx_hash)
     while is_pending(tx_hash):
       pass
     receipt = send_request({
@@ -127,7 +138,7 @@ class BancorFrontrunner(object):
     log('Making a BUY!!!')
     tx_params = {
         'from': self.address,
-        'to': BANCOR_PURCHASE,
+        'to': BANCOR_CHANGER,
         'gas': hex(300000),
         'gasPrice': hex(gas_price),
         'value': dump_to_hex(amount),
@@ -137,15 +148,14 @@ class BancorFrontrunner(object):
     log('Planning to send:', tx_params)
     self.commit_transaction_with_receipt(trade_request)
 
-  def perform_full_change(self, is_buy_bnt, gas_price):
+  def perform_change(self, is_buy_bnt, gas_price):
     log('Making a CHANGE!!! IS_BUY = {0}'.format(is_buy_bnt))
     from_token = ETH_ERC20_TOKEN if is_buy_bnt else BANCOR_TOKEN
     to_token = BANCOR_TOKEN if is_buy_bnt else ETH_ERC20_TOKEN
     amount = self.get_own_balance(from_token)
     min_return = 1
-    data = pack_tx_data(
-        [CHANGE_METHOD, from_token, to_token, amount,
-         min_return], CHANGE_SIGNATURE)
+    data = pack_tx_data(CHANGE_METHOD,
+                        [from_token, to_token, amount, min_return])
     tx_params = {
         'from': self.address,
         'to': BANCOR_CHANGER,
@@ -159,8 +169,7 @@ class BancorFrontrunner(object):
     self.commit_transaction_with_receipt(trade_request)
 
   def handle_transaction(self, tx):
-    if (tx[u'to'] in [BANCOR_PURCHASE, BANCOR_CHANGER] and
-        is_pending(tx[u'hash'])):
+    if tx[u'to'] == BANCOR_CHANGER and is_pending(tx[u'hash']):
       log('Found pending Bancor-related transaction!', tx)
     else:
       return
@@ -178,38 +187,34 @@ class BancorFrontrunner(object):
   def test_parsing(self):
     data = '0x5e5144eb' + \
         '0000000000000000000000001f573d6fb3f13d689ff844b4ce37794d79a7ff1c' + \
-        '000000000000000000000000d76b5c2a23ef78368d8e34288b5b65d616b746ae' + \
+        '000000000000000000000000c0829421c1d260bd3cb3e0f06cfe2d52db2ce315' + \
         '0000000000000000000000000000000000000000000001a31f3fb14451dd1400' + \
         '000000000000000000000000000000000000000000000003afb087b876900000'
-    method, from_token, to_token, amount, min_return = parse_tx_data(
-        data, CHANGE_SIGNATURE)
-    if (method != int(CHANGE_METHOD, 16) or
-        from_token != int(BANCOR_TOKEN, 16) or
+    method, params = parse_tx_data(data)
+    from_token, to_token, amount, min_return = params
+    if (method != CHANGE_METHOD or from_token != int(BANCOR_TOKEN, 16) or
         to_token != int(ETH_ERC20_TOKEN, 16)):
       raise Exception('Parsing fails!')
-    if pack_tx_data([method, from_token, to_token, amount, min_return],
-                    CHANGE_SIGNATURE) != data:
+    if pack_tx_data(method, [from_token, to_token, amount, min_return]) != data:
       raise Exception('Padding fails!')
 
   def test_triggering(self):
-    huge_buy_simple = '0x314e0246cfc55bc0882cbf165145c168834e99924e3ff7619ebd8290e713386d'
-    if not self.triggers_buy(get_transaction(huge_buy_simple)):
-      raise Exception('Buy through PURCHASE triggering fail!')
-    huge_buy_change = '0x0c85e6a666f0ffa67f30d9de67adc14fded8af6532eec7aa9adf4a3882118afe'
-    if not self.triggers_buy(get_transaction(huge_buy_change)):
-      raise Exception('Buy through CHANGE triggering fail!')
+    simple_buy = '0xefa3a16f1875bca6668bf6d6e4ba06eaf58c2bd03137b4d25d317b44fb843dfc'
+    if not self.triggers_buy(get_transaction(simple_buy)):
+      raise Exception('Buy through raw ETH send triggering fail!')
+    quick_buy = '0x3327cfe1bb27f8781857bedbe10686d49aab22a1f9a3e5e6bf7f078a2c147353'
+    if not self.triggers_buy(get_transaction(quick_buy)):
+      raise Exception('Buy through quickBuy triggering fail!')
 
   def withdraw_all_eth_erc20(self):
     WITHDRAW_METHOD = '0x2e1a7d4d'
-    WITHDRAW_SIGNATURE = [8, 64]
-    data = pack_tx_data(
-        [WITHDRAW_METHOD,
-         self.get_own_balance(ETH_ERC20_TOKEN)], WITHDRAW_SIGNATURE)
+    data = pack_tx_data(WITHDRAW_METHOD,
+                        [self.get_own_balance(ETH_ERC20_TOKEN)])
     tx_params = {
         'from': self.address,
         'to': ETH_ERC20_TOKEN,
         'gas': hex(300000),
-        'gasPrice': hex(int(6e9)),
+        'gasPrice': hex(int(21e9)),
         'value': hex(0),
         'data': data,
     }
@@ -250,6 +255,6 @@ if __name__ == '__main__':
   log('Front-running on address', frontrunner.address)
   frontrunner.frontrun()
   log('Front-running done, changing all BNT back to ETH-ERC20')
-  frontrunner.perform_full_change(False, int(6e9))
+  frontrunner.perform_change(False, int(21e9))
   log('Withdrawing ETH-ERC20 to regular ETH')
   frontrunner.withdraw_all_eth_erc20()
