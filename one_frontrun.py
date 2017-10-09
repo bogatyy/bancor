@@ -11,8 +11,8 @@ QUICKBUY_METHOD = '0x7758c4f8'
 QUICKCHANGE_METHOD = '0xa93d7c72'
 BANCOR_TOKEN = '0x1f573d6fb3f13d689ff844b4ce37794d79a7ff1c'
 ETH_ERC20_TOKEN = '0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315'
-BUY_THRESHOLD = int(1e18)  # 1 ETH
-BUY_AMOUNT = int(0.5e18)  # 0.5 ETH
+BUY_THRESHOLD = int(200e18)  # 200 ETH
+BUY_AMOUNT = int(5e18)  # 5 ETH
 
 
 def log(*args):
@@ -199,10 +199,10 @@ class BancorFrontrunner(object):
       raise Exception('Padding fails!')
 
   def test_triggering(self):
-    simple_buy = '0xefa3a16f1875bca6668bf6d6e4ba06eaf58c2bd03137b4d25d317b44fb843dfc'
+    simple_buy = '0x6424958d16a6b687d29ef7ef1289d9fbaf96c9b0c7ef7c618b2a58ed580145af'
     if not self.triggers_buy(get_transaction(simple_buy)):
       raise Exception('Buy through raw ETH send triggering fail!')
-    quick_buy = '0x3327cfe1bb27f8781857bedbe10686d49aab22a1f9a3e5e6bf7f078a2c147353'
+    quick_buy = '0x6738f6a8765517280f887f0876bd9001e5ab69ce9e30b3d9608b2b0453b2aab3'
     if not self.triggers_buy(get_transaction(quick_buy)):
       raise Exception('Buy through quickBuy triggering fail!')
 
