@@ -1,5 +1,5 @@
 # Front-running Bancor
-This code is supplementary to the blog post [Front-running Bancor in 150 lines of Python with Ethereum API](https://medium.com/@ivanbogatyy/front-running-bancor-in-150-lines-of-python-with-ethereum-api-d5e2bfd0d798), which expands on the [research done in Cornell](hackingdistributed.com/2017/06/19/bancor-is-flawed/) and implements a front-running attack as a mere full node (no need to be a miner).
+This code is supplementary to the blog post [Front-running Bancor in 150 lines of Python with Ethereum API](https://medium.com/@ivanbogatyy/front-running-bancor-in-150-lines-of-python-with-ethereum-api-d5e2bfd0d798), which expands on the [research done in Cornell](http://hackingdistributed.com/2017/06/19/bancor-is-flawed/) and implements a front-running attack as a mere full node (no need to be a miner).
 
 ### Usage
 Install and run the `geth` Ethereum client first:
