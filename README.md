@@ -18,3 +18,6 @@ The front-runner code automatically attaches to a running `geth` client:
 $ sudo pip install requests
 $ python one_frontrun.py
 ```
+
+### Contact
+For any bugs in the code, raise a GitHub issue or send me a pull request. For more general discussions, feel free to send me an email at ivanbogatyy@gmail.com.
