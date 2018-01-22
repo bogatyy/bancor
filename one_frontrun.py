@@ -22,7 +22,7 @@ def log(*args):
 
 
 def dump_to_hex(integer):
-  return '0x' + format(integer, 'x')
+  return '{:#x}'.format(integer)
 
 
 def send_request(request):
